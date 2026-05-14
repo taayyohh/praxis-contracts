@@ -67,7 +67,8 @@ contract PraxisTicketMarketTest is Test {
         projectId = praxis.proposeProject(Praxis.ProposeProjectArgs({
             title: "Test Show",
             description: "A test show",
-            projectType: Praxis.ProjectType.SHOW,
+            projectType: "show",
+            metadataCid: "",
             collaborators: collaborators,
             splits: splits,
             fundingGoal: 10 ether,
@@ -76,6 +77,7 @@ contract PraxisTicketMarketTest is Test {
             tierPrices: tierPrices,
             tierMaxSupplies: tierMaxSupplies,
             tierTransferable: tierTransferable,
+            tierMetadataCids: new string[](2),
             revenueSharePercent: 0,
             location: 0,
             disputeWindowDays: 3,

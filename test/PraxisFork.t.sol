@@ -185,10 +185,10 @@ contract PraxisForkTest is Test {
         vm.prank(fiction);
         uint256 projectId = praxis.proposeProject(Praxis.ProposeProjectArgs({
             title: "Fork Test Show", description: "testing on forked Arbitrum",
-            projectType: Praxis.ProjectType.SHOW, collaborators: collabs, splits: splits,
+            projectType: "show", metadataCid: "", collaborators: collabs, splits: splits,
             fundingGoal: 1 ether, deadline: block.timestamp + 30 days,
             tierNames: tierNames, tierPrices: tierPrices, tierMaxSupplies: tierSupplies,
-            tierTransferable: tierTransferable, revenueSharePercent: 0, location: 0,
+            tierTransferable: tierTransferable, tierMetadataCids: new string[](tierNames.length), revenueSharePercent: 0, location: 0,
             disputeWindowDays: 3, autoComplete: false, confirmationMode: 3
         }));
 
@@ -306,10 +306,10 @@ contract PraxisForkTest is Test {
         vm.prank(fiction);
         uint256 projectId = praxis.proposeProject(Praxis.ProposeProjectArgs({
             title: "Ticket Market Test", description: "testing ticket resale",
-            projectType: Praxis.ProjectType.SHOW, collaborators: collabs, splits: splits,
+            projectType: "show", metadataCid: "", collaborators: collabs, splits: splits,
             fundingGoal: 0.1 ether, deadline: block.timestamp + 30 days,
             tierNames: tierNames, tierPrices: tierPrices, tierMaxSupplies: tierSupplies,
-            tierTransferable: tierTransferable, revenueSharePercent: 0, location: 0,
+            tierTransferable: tierTransferable, tierMetadataCids: new string[](tierNames.length), revenueSharePercent: 0, location: 0,
             disputeWindowDays: 3, autoComplete: false, confirmationMode: 3
         }));
 
@@ -392,10 +392,10 @@ contract PraxisForkTest is Test {
         vm.prank(fiction);
         uint256 projectId = praxis.proposeProject(Praxis.ProposeProjectArgs({
             title: "Cancel Test", description: "testing cancel",
-            projectType: Praxis.ProjectType.SHOW, collaborators: collabs, splits: splits,
+            projectType: "show", metadataCid: "", collaborators: collabs, splits: splits,
             fundingGoal: 0.1 ether, deadline: block.timestamp + 30 days,
             tierNames: tierNames, tierPrices: tierPrices, tierMaxSupplies: tierSupplies,
-            tierTransferable: tierTransferable, revenueSharePercent: 0, location: 0,
+            tierTransferable: tierTransferable, tierMetadataCids: new string[](1), revenueSharePercent: 0, location: 0,
             disputeWindowDays: 3, autoComplete: false, confirmationMode: 3
         }));
 

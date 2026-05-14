@@ -533,7 +533,7 @@ contract PraxisGapTest is Test {
     function _callPropose(
         string memory title,
         string memory description,
-        Praxis.ProjectType projectType,
+        string memory projectType,
         address[] memory collaborators,
         uint256[] memory splits,
         uint256 fundingGoal,
@@ -564,6 +564,8 @@ contract PraxisGapTest is Test {
             location: location,
             disputeWindowDays: disputeWindowDays,
             autoComplete: autoComplete,
+            metadataCid: "",
+            tierMetadataCids: new string[](tierNames.length),
             confirmationMode: confirmationMode
         }));
     }
@@ -669,7 +671,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("goal too low");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 0, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 0, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function test_propose_past_deadline_reverts() public {
@@ -689,7 +691,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("past deadline");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp - 1, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp - 1, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function test_propose_too_many_collaborators_reverts() public {
@@ -713,7 +715,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("too many collaborators");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function test_propose_splits_not_10000_reverts() public {
@@ -733,7 +735,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("splits must sum to 10000");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function test_propose_zero_tier_price_reverts() public {
@@ -753,7 +755,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("zero tier price");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function test_propose_tier_arrays_mismatch_reverts() public {
@@ -773,7 +775,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("tier arrays mismatch");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function test_propose_unregistered_collaborator_reverts() public {
@@ -794,7 +796,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("collaborator not registered");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function test_propose_invalid_revenue_share_reverts() public {
@@ -814,7 +816,7 @@ contract PraxisGapTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("invalid revenue share");
-        _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 10001, 0, 3, false, 3);
+        _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 10001, 0, 3, false, 3);
     }
 
     // --- fundTier edge cases ---
@@ -1086,7 +1088,7 @@ contract PraxisGapTest is Test {
         tierTransferable[0] = true; tierTransferable[1] = false; tierTransferable[2] = false;
 
         vm.prank(alice);
-        return _callPropose("Comedy of Errors", "Shakespeare", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3);
+        return _callPropose("Comedy of Errors", "Shakespeare", "show", collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3);
     }
 
     function _proposeShowSmall() internal returns (uint256) {
@@ -1105,7 +1107,7 @@ contract PraxisGapTest is Test {
         tierTransferable[0] = true;
 
         vm.prank(alice);
-        return _callPropose("Small Show", "test", Praxis.ProjectType.SHOW, collabs, splits, 0.1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3);
+        return _callPropose("Small Show", "test", "show", collabs, splits, 0.1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3);
     }
 
     function _proposeShowWithCollab(address collab) internal returns (uint256) {
@@ -1124,7 +1126,7 @@ contract PraxisGapTest is Test {
         tierTransferable[0] = true;
 
         vm.prank(alice);
-        return _callPropose("Test", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3);
+        return _callPropose("Test", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3);
     }
 
     function _fundToGoal(uint256 projectId) internal {
@@ -1178,7 +1180,7 @@ contract PraxisGapTest is Test {
         tierTransferable[0] = true;
 
         vm.prank(alice);
-        return _callPropose("Revenue Show", "rev share", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, revShareBps, 0, 3, false, 3);
+        return _callPropose("Revenue Show", "rev share", "show", collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, revShareBps, 0, 3, false, 3);
     }
 
     function _fundAndComplete(uint256 projectId) internal {
@@ -1409,10 +1411,10 @@ contract PraxisTicketMarketGapTest is Test {
 
         vm.prank(alice);
         projectId = praxis.proposeProject(Praxis.ProposeProjectArgs({
-            title: "Test", description: "desc", projectType: Praxis.ProjectType.SHOW,
+            title: "Test", description: "desc", projectType: "show", metadataCid: "",
             collaborators: collabs, splits: splits, fundingGoal: 10 ether,
             deadline: block.timestamp + 30 days, tierNames: tierNames, tierPrices: tierPrices,
-            tierMaxSupplies: tierSupplies, tierTransferable: tierTransferable,
+            tierMaxSupplies: tierSupplies, tierTransferable: tierTransferable, tierMetadataCids: new string[](1),
             revenueSharePercent: 0, location: 0, disputeWindowDays: 3,
             autoComplete: false, confirmationMode: 3
         }));

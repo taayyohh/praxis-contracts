@@ -16,9 +16,6 @@ import "./interfaces.sol";
 contract Praxis {
     // --- Types ---
 
-    /// @notice Categories of creative projects
-    enum ProjectType { SHOW, FILM, THEATER, RECORDING, WORKSHOP, INSTALLATION, OTHER }
-
     /// @notice Project status: proposed (0), funded (1), confirmed (2), completing (3), completed (4), cancelled (5), disputed (6)
     uint8 public constant PROPOSED = 0;
     uint8 public constant FUNDED = 1;
@@ -33,7 +30,8 @@ contract Praxis {
         address proposer;
         string title;
         string description;
-        ProjectType projectType;
+        string projectType;
+        string metadataCid;
         address[] collaborators;
         uint256[] splits;
         uint256 fundingGoal;
@@ -59,6 +57,7 @@ contract Praxis {
         uint256 maxSupply;
         uint256 sold;
         bool transferable;
+        string metadataCid;
     }
 
     /// @notice Arguments for `proposeProject`, packed into a struct to avoid
@@ -67,7 +66,8 @@ contract Praxis {
     struct ProposeProjectArgs {
         string title;
         string description;
-        ProjectType projectType;
+        string projectType;
+        string metadataCid;
         address[] collaborators;
         uint256[] splits;
         uint256 fundingGoal;
@@ -76,6 +76,7 @@ contract Praxis {
         uint256[] tierPrices;
         uint256[] tierMaxSupplies;
         bool[] tierTransferable;
+        string[] tierMetadataCids;
         uint256 revenueSharePercent;
         uint128 location;
         uint256 disputeWindowDays;
@@ -164,6 +165,9 @@ contract Praxis {
     ///      `claimCompletionInvites(projectId)` themselves.
     mapping(uint256 => mapping(address => bool)) public completionInviteClaimed;
 
+    /// @notice Whether data migration is locked (one-way flag)
+    bool public migrationLocked;
+
     /// @notice Packed latitude/longitude for project location (0 = no location)
     mapping(uint256 => uint128) public projectLocation;
 
@@ -248,6 +252,18 @@ contract Praxis {
     /// @param funder The funder's address
     /// @param amount ETH claimed
     event RevenueClaimed(uint256 indexed projectId, address indexed funder, uint256 amount);
+
+    /// @notice Emitted when a project is updated by the proposer
+    /// @param projectId The project ID
+    /// @param title Updated title (empty = unchanged)
+    /// @param description Updated description (empty = unchanged)
+    /// @param projectType Updated project type (empty = unchanged)
+    /// @param metadataCid Updated metadata CID (can be empty to clear)
+    event ProjectUpdated(uint256 indexed projectId, string title, string description, string projectType, string metadataCid);
+
+    /// @notice Emitted when a confirmed project is timed out by a collaborator
+    /// @param projectId The project ID
+    event ProjectTimedOut(uint256 indexed projectId);
 
     /// @notice ERC-6909 transfer event
     event Transfer(address caller, address indexed sender, address indexed receiver, uint256 indexed id, uint256 amount);
@@ -409,7 +425,7 @@ contract Praxis {
     /// @dev Args packed into a struct to avoid stack-too-deep in via_ir coverage builds.
     /// @param args See {ProposeProjectArgs}
     /// @return id The new project's id
-    function proposeProject(ProposeProjectArgs calldata args) external onlyRegistered returns (uint256) {
+    function proposeProject(ProposeProjectArgs calldata args) external onlyUser returns (uint256) {
         require(bytes(args.title).length > 0, "empty title");
         require(args.collaborators.length > 0, "no collaborators");
         require(args.collaborators.length <= 200, "too many collaborators");
@@ -423,7 +439,8 @@ contract Praxis {
         require(
             args.tierNames.length == args.tierPrices.length &&
             args.tierNames.length == args.tierMaxSupplies.length &&
-            args.tierNames.length == args.tierTransferable.length,
+            args.tierNames.length == args.tierTransferable.length &&
+            (args.tierMetadataCids.length == 0 || args.tierMetadataCids.length == args.tierNames.length),
             "tier arrays mismatch"
         );
         require(args.disputeWindowDays <= 30, "dispute window too long");
@@ -442,14 +459,21 @@ contract Praxis {
         }
 
         uint256 totalSplits;
-        for (uint256 i = 0; i < args.splits.length; i++) {
-            totalSplits += args.splits[i];
+        {
+            uint256 splitsLen = args.splits.length;
+            for (uint256 i = 0; i < splitsLen;) {
+                totalSplits += args.splits[i];
+                unchecked { ++i; }
+            }
         }
         require(totalSplits == 10000, "splits must sum to 10000");
 
-        for (uint256 i = 0; i < args.collaborators.length; i++) {
-            (, uint256 registeredAt) = REGISTRY.artists(args.collaborators[i]);
-            require(registeredAt > 0, "collaborator not registered");
+        {
+            uint256 collabLen = args.collaborators.length;
+            for (uint256 i = 0; i < collabLen;) {
+                require(REGISTRY.isUser(args.collaborators[i]), "collaborator not registered");
+                unchecked { ++i; }
+            }
         }
 
         uint256 id = projectCount++;
@@ -458,6 +482,7 @@ contract Praxis {
         p.title = args.title;
         p.description = args.description;
         p.projectType = args.projectType;
+        p.metadataCid = args.metadataCid;
         p.collaborators = args.collaborators;
         p.splits = args.splits;
         p.fundingGoal = args.fundingGoal;
@@ -468,17 +493,23 @@ contract Praxis {
         p.autoComplete = args.autoComplete;
         p.confirmationMode = _confirmationMode;
 
-        for (uint256 i = 0; i < args.tierNames.length; i++) {
-            require(args.tierPrices[i] > 0, "zero tier price");
-            tiers[id][i] = Tier({
-                name: args.tierNames[i],
-                price: args.tierPrices[i],
-                maxSupply: args.tierMaxSupplies[i],
-                sold: 0,
-                transferable: args.tierTransferable[i]
-            });
+        {
+            uint256 tierLen = args.tierNames.length;
+            bool hasTierCids = args.tierMetadataCids.length > 0;
+            for (uint256 i = 0; i < tierLen;) {
+                require(args.tierPrices[i] > 0, "zero tier price");
+                tiers[id][i] = Tier({
+                    name: args.tierNames[i],
+                    price: args.tierPrices[i],
+                    maxSupply: args.tierMaxSupplies[i],
+                    sold: 0,
+                    transferable: args.tierTransferable[i],
+                    metadataCid: hasTierCids ? args.tierMetadataCids[i] : ""
+                });
+                unchecked { ++i; }
+            }
+            tierCount[id] = tierLen;
         }
-        tierCount[id] = args.tierNames.length;
 
         if (args.revenueSharePercent > 0) {
             require(args.revenueSharePercent <= 10000, "invalid revenue share");
@@ -521,11 +552,12 @@ contract Praxis {
         // Use monotonic mint counter (never decrements on burn) so withdrawn serials
         // are never reused — preserves token-id uniqueness across the project's life.
         uint256 mintedSoFar = _tierMinted[projectId][tierId];
-        for (uint256 i = 0; i < quantity; i++) {
+        for (uint256 i = 0; i < quantity;) {
             uint256 serial = mintedSoFar + i + 1;
             uint256 tokenId = generateTokenId(tokenType, projectId, tierId, serial);
             _mint(msg.sender, tokenId, 1);
             _funderTokenSerials[projectId][tierId][msg.sender].push(serial);
+            unchecked { ++i; }
         }
         _tierMinted[projectId][tierId] = mintedSoFar + quantity;
 
@@ -538,21 +570,24 @@ contract Praxis {
                 // distribute to pendingWithdrawals per splits (last gets remainder)
                 uint256 total = p.totalFunded;
                 uint256 remaining = total;
-                for (uint256 j = 0; j < p.collaborators.length; j++) {
+                uint256 cLen = p.collaborators.length;
+                for (uint256 j = 0; j < cLen;) {
                     uint256 share;
-                    if (j == p.collaborators.length - 1) {
+                    if (j == cLen - 1) {
                         share = remaining;
                     } else {
                         share = (total * p.splits[j]) / 10000;
                     }
                     pendingWithdrawals[p.collaborators[j]] += share;
                     remaining -= share;
+                    unchecked { ++j; }
                 }
 
                 // mint CONTRIBUTOR tokens
-                for (uint256 j = 0; j < p.collaborators.length; j++) {
+                for (uint256 j = 0; j < cLen;) {
                     uint256 tokenId = generateTokenId(CONTRIBUTOR, projectId, 0, j);
                     _mint(p.collaborators[j], tokenId, 1);
+                    unchecked { ++j; }
                 }
 
                 // Invites are NOT pushed here — participants pull via claimCompletionInvites()
@@ -583,12 +618,13 @@ contract Praxis {
         // If funder transferred tickets away, they don't get refunded for those.
         uint256 refundAmount;
         uint256 tc = tierCount[projectId];
-        for (uint256 t = 0; t < tc; t++) {
+        for (uint256 t = 0; t < tc;) {
             Tier storage tier = tiers[projectId][t];
             uint8 tokenType = tier.transferable ? TICKET : PRODUCER;
             uint256[] storage serials = _funderTokenSerials[projectId][t][msg.sender];
             uint256 burned;
-            for (uint256 i = 0; i < serials.length; i++) {
+            uint256 sLen = serials.length;
+            for (uint256 i = 0; i < sLen;) {
                 uint256 tokenId = generateTokenId(tokenType, projectId, t, serials[i]);
                 uint256 bal = balanceOf[msg.sender][tokenId];
                 if (bal > 0) {
@@ -596,9 +632,11 @@ contract Praxis {
                     burned += bal;
                     refundAmount += tier.price * bal;
                 }
+                unchecked { ++i; }
             }
             delete _funderTokenSerials[projectId][t][msg.sender];
             tier.sold -= burned;
+            unchecked { ++t; }
         }
         require(refundAmount > 0, "no tokens held");
 
@@ -624,8 +662,12 @@ contract Praxis {
         require(p.status == FUNDED, "not funded");
 
         bool isParticipant = (msg.sender == p.proposer);
-        for (uint256 i = 0; i < p.collaborators.length; i++) {
-            if (p.collaborators[i] == msg.sender) { isParticipant = true; break; }
+        {
+            uint256 cLen = p.collaborators.length;
+            for (uint256 i = 0; i < cLen;) {
+                if (p.collaborators[i] == msg.sender) { isParticipant = true; break; }
+                unchecked { ++i; }
+            }
         }
         require(isParticipant, "not a participant");
         require(!hasConfirmed[projectId][msg.sender], "already confirmed");
@@ -651,12 +693,14 @@ contract Praxis {
         if (p.confirmationMode == 1) return true; // proposer-only
 
         uint256 collabConfirms;
-        for (uint256 i = 0; i < p.collaborators.length; i++) {
+        uint256 cLen = p.collaborators.length;
+        for (uint256 i = 0; i < cLen;) {
             if (hasConfirmed[projectId][p.collaborators[i]]) collabConfirms++;
+            unchecked { ++i; }
         }
 
-        if (p.confirmationMode == 2) return collabConfirms > p.collaborators.length / 2; // majority
-        return collabConfirms == p.collaborators.length; // all (mode 3)
+        if (p.confirmationMode == 2) return collabConfirms > cLen / 2; // majority
+        return collabConfirms == cLen; // all (mode 3)
     }
 
     // --- Completion: starts 3-day dispute window ---
@@ -719,21 +763,24 @@ contract Praxis {
 
         // distribute to pendingWithdrawals per splits (last gets remainder to avoid dust)
         uint256 remaining = total;
-        for (uint256 i = 0; i < p.collaborators.length; i++) {
+        uint256 cLen = p.collaborators.length;
+        for (uint256 i = 0; i < cLen;) {
             uint256 share;
-            if (i == p.collaborators.length - 1) {
+            if (i == cLen - 1) {
                 share = remaining; // last collaborator gets remainder
             } else {
                 share = (total * p.splits[i]) / 10000;
             }
             pendingWithdrawals[p.collaborators[i]] += share;
             remaining -= share;
+            unchecked { ++i; }
         }
 
         // mint CONTRIBUTOR tokens to all collaborators
-        for (uint256 i = 0; i < p.collaborators.length; i++) {
+        for (uint256 i = 0; i < cLen;) {
             uint256 tokenId = generateTokenId(CONTRIBUTOR, projectId, 0, i);
             _mint(p.collaborators[i], tokenId, 1);
+            unchecked { ++i; }
         }
 
         // Invites are pulled by participants via claimCompletionInvites() — see notes above.
@@ -756,8 +803,10 @@ contract Praxis {
         if (contributions[projectId][msg.sender] > 0) {
             eligible = true;
         } else {
-            for (uint256 i = 0; i < p.collaborators.length; i++) {
+            uint256 cLen = p.collaborators.length;
+            for (uint256 i = 0; i < cLen;) {
                 if (p.collaborators[i] == msg.sender) { eligible = true; break; }
+                unchecked { ++i; }
             }
         }
         require(eligible, "not eligible");
@@ -797,12 +846,13 @@ contract Praxis {
         // Prevents transfer-then-refund exploit on cancellation.
         uint256 refundAmount;
         uint256 tc = tierCount[projectId];
-        for (uint256 t = 0; t < tc; t++) {
+        for (uint256 t = 0; t < tc;) {
             Tier storage tier = tiers[projectId][t];
             uint8 tokenType = tier.transferable ? TICKET : PRODUCER;
             uint256[] storage serials = _funderTokenSerials[projectId][t][msg.sender];
             uint256 burned;
-            for (uint256 i = 0; i < serials.length; i++) {
+            uint256 sLen = serials.length;
+            for (uint256 i = 0; i < sLen;) {
                 uint256 tokenId = generateTokenId(tokenType, projectId, t, serials[i]);
                 uint256 bal = balanceOf[msg.sender][tokenId];
                 if (bal > 0) {
@@ -810,9 +860,11 @@ contract Praxis {
                     burned += bal;
                     refundAmount += tier.price * bal;
                 }
+                unchecked { ++i; }
             }
             delete _funderTokenSerials[projectId][t][msg.sender];
             tier.sold -= burned;
+            unchecked { ++t; }
         }
         // If no tokens held but had contribution (e.g., all transferred), no refund
         require(refundAmount > 0, "no tokens held");
@@ -904,6 +956,96 @@ contract Praxis {
         return entitled - claimedRevenue[projectId][funder];
     }
 
+    // --- Update / Timeout / Migration ---
+
+    /// @notice Update a project's metadata (proposer only, before funding starts)
+    /// @param projectId The project to update
+    /// @param title New title (empty string = keep current)
+    /// @param description New description (empty string = keep current)
+    /// @param projectType New project type (empty string = keep current)
+    /// @param metadataCid New metadata CID (always set, empty clears it)
+    function updateProject(
+        uint256 projectId,
+        string calldata title,
+        string calldata description,
+        string calldata projectType,
+        string calldata metadataCid
+    ) external {
+        Project storage p = _projects[projectId];
+        require(msg.sender == p.proposer, "only proposer");
+        require(p.status == PROPOSED || p.status == CONFIRMED, "cannot update after funding starts");
+        if (bytes(title).length > 0) p.title = title;
+        if (bytes(description).length > 0) p.description = description;
+        if (bytes(projectType).length > 0) p.projectType = projectType;
+        p.metadataCid = metadataCid; // allow clearing
+        emit ProjectUpdated(projectId, title, description, projectType, metadataCid);
+    }
+
+    /// @notice Force-cancel a confirmed project if the proposer hasn't acted within deadline + 30 days
+    /// @dev Any collaborator or the deployer can trigger this
+    /// @param projectId The project to time out
+    function timeoutProject(uint256 projectId) external {
+        Project storage p = _projects[projectId];
+        require(p.status == CONFIRMED, "not confirmed");
+        require(block.timestamp > p.deadline + 30 days, "deadline + 30 days not passed");
+
+        bool isCollab;
+        uint256 len = p.collaborators.length;
+        for (uint256 i = 0; i < len;) {
+            if (p.collaborators[i] == msg.sender) { isCollab = true; break; }
+            unchecked { ++i; }
+        }
+        require(isCollab || msg.sender == REGISTRY.deployer(), "not authorized");
+
+        p.status = CANCELLED;
+        emit ProjectTimedOut(projectId);
+        emit ProjectCancelled(projectId);
+    }
+
+    /// @notice Arguments for `migrateProject`, packed to avoid stack-too-deep
+    struct MigrateProjectArgs {
+        address proposer;
+        string title;
+        string description;
+        string projectType;
+        string metadataCid;
+        uint8 status;
+        address[] collaborators;
+        uint256[] splits;
+        uint256 fundingGoal;
+        uint256 deadline;
+        uint256 createdAt;
+    }
+
+    /// @notice Migrate a project from off-chain data (deployer only, before migration is locked)
+    /// @param args See {MigrateProjectArgs}
+    function migrateProject(MigrateProjectArgs calldata args) external {
+        require(msg.sender == REGISTRY.deployer(), "only deployer");
+        require(!migrationLocked, "locked");
+
+        uint256 id = projectCount++;
+        Project storage p = _projects[id];
+        p.proposer = args.proposer;
+        p.title = args.title;
+        p.description = args.description;
+        p.projectType = args.projectType;
+        p.metadataCid = args.metadataCid;
+        p.status = args.status;
+        p.collaborators = args.collaborators;
+        p.splits = args.splits;
+        p.fundingGoal = args.fundingGoal;
+        p.deadline = args.deadline;
+        p.createdAt = args.createdAt;
+
+        emit ProjectProposed(id, args.proposer, args.fundingGoal);
+    }
+
+    /// @notice Permanently lock migration (deployer only, irreversible)
+    function lockMigration() external {
+        require(msg.sender == REGISTRY.deployer(), "only deployer");
+        migrationLocked = true;
+    }
+
     // --- Views ---
 
     /// @notice Get full project details
@@ -911,7 +1053,8 @@ contract Praxis {
     /// @return proposer The project proposer
     /// @return title Project title
     /// @return description Project description
-    /// @return projectType Project category
+    /// @return projectType Project category (free-form string)
+    /// @return metadataCid IPFS CID for off-chain metadata
     /// @return collaborators Array of collaborator addresses
     /// @return splits Revenue splits in basis points
     /// @return fundingGoal Target funding in wei
@@ -923,7 +1066,8 @@ contract Praxis {
         address proposer,
         string memory title,
         string memory description,
-        ProjectType projectType,
+        string memory projectType,
+        string memory metadataCid,
         address[] memory collaborators,
         uint256[] memory splits,
         uint256 fundingGoal,
@@ -933,7 +1077,7 @@ contract Praxis {
         uint256 createdAt
     ) {
         Project storage p = _projects[projectId];
-        return (p.proposer, p.title, p.description, p.projectType,
+        return (p.proposer, p.title, p.description, p.projectType, p.metadataCid,
                 p.collaborators, p.splits, p.fundingGoal, p.totalFunded,
                 p.deadline, p.status, p.createdAt);
     }
@@ -956,15 +1100,17 @@ contract Praxis {
     /// @return maxSupply Maximum mintable units (0 = unlimited)
     /// @return sold Number of units sold
     /// @return transferable Whether the tier mints transferable tickets
+    /// @return metadataCid IPFS CID for off-chain tier metadata
     function getTier(uint256 projectId, uint256 tierId) external view returns (
         string memory name,
         uint256 price,
         uint256 maxSupply,
         uint256 sold,
-        bool transferable
+        bool transferable,
+        string memory metadataCid
     ) {
         Tier storage t = tiers[projectId][tierId];
-        return (t.name, t.price, t.maxSupply, t.sold, t.transferable);
+        return (t.name, t.price, t.maxSupply, t.sold, t.transferable, t.metadataCid);
     }
 
     /// @notice Get the serial numbers held by a funder within a tier

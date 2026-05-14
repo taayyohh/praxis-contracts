@@ -71,7 +71,7 @@ contract PraxisTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("no tiers");
-        _callPropose("Show", "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        _callPropose("Show", "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     // --- Fund tiers ---
@@ -103,7 +103,7 @@ contract PraxisTest is Test {
         vm.prank(dave);
         praxis.fundTier{value: 1 ether}(0, 2, 1);
 
-        (,,,,,,,, , uint8 status,) = praxis.getProject(0);
+        (,,,,,,,,, , uint8 status,) = praxis.getProject(0);
         assertEq(status, 1); // FUNDED
     }
 
@@ -130,7 +130,7 @@ contract PraxisTest is Test {
         tTransfer[0] = true;
 
         vm.prank(alice);
-        uint256 id = _callPropose("Sold Out Test", "test", Praxis.ProjectType.SHOW, collabs, splits, 100 ether, block.timestamp + 30 days, tNames, tPrices, tSupplies, tTransfer, 0, 0, 3, false, 3);
+        uint256 id = _callPropose("Sold Out Test", "test", "show", collabs, splits, 100 ether, block.timestamp + 30 days, tNames, tPrices, tSupplies, tTransfer, 0, 0, 3, false, 3);
 
         vm.prank(dave);
         praxis.fundTier{value: 0.03 ether}(id, 0, 3); // buy all 3
@@ -189,7 +189,7 @@ contract PraxisTest is Test {
         vm.prank(alice); // proposer
         praxis.confirmProject(0);
 
-        (,,,,,,,,, uint8 status,) = praxis.getProject(0);
+        (,,,,,,,,,, uint8 status,) = praxis.getProject(0);
         assertEq(status, 1); // still FUNDED, not CONFIRMED (need majority of collabs)
     }
 
@@ -203,14 +203,14 @@ contract PraxisTest is Test {
         vm.prank(bob); // 1 of 2 collaborators = 50%, need >50%
         praxis.confirmProject(0);
 
-        (,,,,,,,,, uint8 status1,) = praxis.getProject(0);
+        (,,,,,,,,,, uint8 status1,) = praxis.getProject(0);
         // 1 of 2 = 50%, not >50%. Still FUNDED.
         assertEq(status1, 1);
 
         vm.prank(charlie); // 2 of 2 collaborators = 100% > 50%
         praxis.confirmProject(0);
 
-        (,,,,,,,,, uint8 status2,) = praxis.getProject(0);
+        (,,,,,,,,,, uint8 status2,) = praxis.getProject(0);
         assertEq(status2, 2); // CONFIRMED
     }
 
@@ -245,7 +245,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         praxis.completeProject(0);
 
-        (,,,,,,,,, uint8 status,) = praxis.getProject(0);
+        (,,,,,,,,,, uint8 status,) = praxis.getProject(0);
         assertEq(status, 3); // COMPLETING (dispute window)
     }
 
@@ -271,7 +271,7 @@ contract PraxisTest is Test {
 
         praxis.finalizeProject(0);
 
-        (,,,,,,,,, uint8 status,) = praxis.getProject(0);
+        (,,,,,,,,,, uint8 status,) = praxis.getProject(0);
         assertEq(status, 4); // COMPLETED
 
         // funds distributed to pending
@@ -335,7 +335,7 @@ contract PraxisTest is Test {
         vm.prank(dave);
         praxis.dispute(id);
 
-        (,,,,,,,,, uint8 status,) = praxis.getProject(id);
+        (,,,,,,,,,, uint8 status,) = praxis.getProject(id);
         assertEq(status, 5); // CANCELLED (auto-cancelled by majority dispute)
     }
 
@@ -355,7 +355,7 @@ contract PraxisTest is Test {
         vm.prank(dave);
         praxis.dispute(id);
         // Already cancelled after dave's 60%, but test eve can also dispute
-        (,,,,,,,,, uint8 status1,) = praxis.getProject(id);
+        (,,,,,,,,,, uint8 status1,) = praxis.getProject(id);
         assertEq(status1, 5); // CANCELLED
     }
 
@@ -374,7 +374,7 @@ contract PraxisTest is Test {
         // eve disputes (0.06 / 0.10 = 60% >= 50%) — should cancel
         vm.prank(eve);
         praxis.dispute(id);
-        (,,,,,,,,, uint8 status,) = praxis.getProject(id);
+        (,,,,,,,,,, uint8 status,) = praxis.getProject(id);
         assertEq(status, 5); // CANCELLED (>= 50% threshold met)
     }
 
@@ -396,7 +396,7 @@ contract PraxisTest is Test {
         vm.prank(eve);
         praxis.dispute(id);
 
-        (,,,,,,,,, uint8 status,) = praxis.getProject(id);
+        (,,,,,,,,,, uint8 status,) = praxis.getProject(id);
         assertEq(status, 3); // still COMPLETING
     }
 
@@ -536,7 +536,7 @@ contract PraxisTest is Test {
     function _callPropose(
         string memory title,
         string memory description,
-        Praxis.ProjectType projectType,
+        string memory projectType,
         address[] memory collaborators,
         uint256[] memory splits,
         uint256 fundingGoal,
@@ -567,6 +567,8 @@ contract PraxisTest is Test {
             location: location,
             disputeWindowDays: disputeWindowDays,
             autoComplete: autoComplete,
+            metadataCid: "",
+            tierMetadataCids: new string[](tierNames.length),
             confirmationMode: confirmationMode
         }));
     }
@@ -600,7 +602,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         return _callPropose(
             "Comedy of Errors", "Shakespeare in the park",
-            Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3
         );
@@ -624,7 +626,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         return _callPropose(
             "Small Show", "test",
-            Praxis.ProjectType.SHOW, collabs, splits, 0.1 ether,
+            "show", collabs, splits, 0.1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 3, false, 3
         );
@@ -645,7 +647,7 @@ contract PraxisTest is Test {
         bool[] memory transferable = new bool[](1);
         transferable[0] = true;
 
-        return _callPropose(title, "desc", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
+        return _callPropose(title, "desc", "show", collabs, splits, 1 ether, block.timestamp + 30 days, names, prices, supplies, transferable, 0, 0, 3, false, 3);
     }
 
     function _fundToGoal(uint256 projectId) internal {
@@ -682,7 +684,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         return _callPropose(
             "Revenue Show", "rev share test",
-            Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, revShareBps, 0, 3, false, 3
         );
@@ -859,7 +861,7 @@ contract PraxisTest is Test {
         tierTransferable[0] = true;
 
         vm.prank(alice);
-        uint256 id = _callPropose("NYC Show", "show in brooklyn", Praxis.ProjectType.SHOW, collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, packed, 3, false, 3);
+        uint256 id = _callPropose("NYC Show", "show in brooklyn", "show", collabs, splits, 1 ether, block.timestamp + 30 days, tierNames, tierPrices, tierSupplies, tierTransferable, 0, packed, 3, false, 3);
 
         assertEq(uint256(praxis.projectLocation(id)), uint256(packed));
 
@@ -929,7 +931,7 @@ contract PraxisTest is Test {
         praxis.withdrawFunding(id);
 
         // totalFunded should be reduced to eve's contribution only
-        (,,,,,, , uint256 totalFunded,,,) = praxis.getProject(id);
+        (,,,,,,,, uint256 totalFunded,,,) = praxis.getProject(id);
         assertEq(totalFunded, 0.04 ether);
     }
 
@@ -1051,7 +1053,7 @@ contract PraxisTest is Test {
 
         vm.prank(alice);
         vm.expectRevert("too many tiers");
-        _callPropose("Bad","x",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,1);
+        _callPropose("Bad","x","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,1);
     }
 
     // =====================================================================
@@ -1077,7 +1079,7 @@ contract PraxisTest is Test {
         // autoComplete=true, disputeWindowDays=0, confirmationMode=0
         return _callPropose(
             "Auto Show", "instant purchase",
-            Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0, 0, true, 0
         );
@@ -1123,7 +1125,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         vm.expectRevert("autoComplete requires no dispute window");
         _callPropose(
-            "Bad", "test", Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "Bad", "test", "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0,
             3, true, 0 // autoComplete=true but disputeWindowDays=3 — should revert
@@ -1164,7 +1166,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         return _callPropose(
             "Confirm Test", "test",
-            Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0,
             3, false, mode // disputeWindowDays=3, autoComplete=false, confirmationMode=mode
@@ -1246,7 +1248,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         vm.expectRevert("invalid confirmation mode");
         _callPropose(
-            "Bad", "test", Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "Bad", "test", "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0,
             3, false, 4 // mode=4 invalid
@@ -1270,7 +1272,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         vm.expectRevert("non-autoComplete needs confirmation");
         _callPropose(
-            "Bad", "test", Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "Bad", "test", "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0,
             3, false, 0 // autoComplete=false but confirmationMode=0 — should revert
@@ -1311,7 +1313,7 @@ contract PraxisTest is Test {
 
         vm.prank(alice);
         uint256 id = _callPropose(
-            "7day", "test", Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "7day", "test", "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0,
             7, false, 1 // 7-day dispute window, proposer-only confirmation
@@ -1353,7 +1355,7 @@ contract PraxisTest is Test {
         vm.prank(alice);
         // disputeWindowDays=0 with non-autoComplete — should succeed but default to 1 day
         uint256 id = _callPropose(
-            "Default", "test", Praxis.ProjectType.SHOW, collabs, splits, 1 ether,
+            "Default", "test", "show", collabs, splits, 1 ether,
             block.timestamp + 30 days,
             tierNames, tierPrices, tierSupplies, tierTransferable, 0, 0,
             0, false, 1
@@ -1392,10 +1394,10 @@ contract PraxisTest is Test {
         vm.prank(alice);
         if (days_ > 30) {
             vm.expectRevert("dispute window too long");
-            _callPropose("F","d",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,days_,false,1);
+            _callPropose("F","d","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,days_,false,1);
         } else {
             // Should succeed (0 gets defaulted to 1 for non-autoComplete)
-            _callPropose("F","d",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,days_,false,1);
+            _callPropose("F","d","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,days_,false,1);
         }
     }
 
@@ -1412,12 +1414,12 @@ contract PraxisTest is Test {
         vm.prank(alice);
         if (mode == 0) {
             vm.expectRevert("non-autoComplete needs confirmation");
-            _callPropose("F","d",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,mode);
+            _callPropose("F","d","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,mode);
         } else if (mode > 3) {
             vm.expectRevert("invalid confirmation mode");
-            _callPropose("F","d",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,mode);
+            _callPropose("F","d","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,mode);
         } else {
-            _callPropose("F","d",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,mode);
+            _callPropose("F","d","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,mode);
         }
     }
 
@@ -1584,9 +1586,9 @@ contract PraxisTest is Test {
         vm.prank(alice);
         if (splitA + splitB != 10000) {
             vm.expectRevert("splits must sum to 10000");
-            _callPropose("F","d",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,1);
+            _callPropose("F","d","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,1);
         } else {
-            _callPropose("F","d",Praxis.ProjectType.SHOW,collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,1);
+            _callPropose("F","d","show",collabs,splits,1 ether,block.timestamp+30 days,tn,tp,ts,tt,0,0,3,false,1);
         }
     }
 }
