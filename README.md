@@ -7,7 +7,7 @@ Smart contracts for the [Praxis network](https://ourpraxis.network) — a decent
 | Contract | Address | Purpose |
 |----------|---------|---------|
 | ArtistRegistry | `0x4bC73F9CC7C7a84B5Cf20e1469Ad65f8b5448336` | Artist + supporter registration, follows, domains |
-| Praxis | `0xA34f1d26Ff9D6fd1E36DD317987DffE2a557DDA0` | Projects, funding, credentials, dispute resolution |
+| Praxis | `0xF6BffdfB24101577b6697fC73811086135a52133` | Projects, funding, credentials, dispute resolution |
 | BlogRegistry | `0x839505786d0438848F5EAdBDfD11D693A3D01002` | On-chain blog posts with references |
 | PraxisMedia | `0xaF995dB3955419E9E2086FD02891580F8a025481` | Media listings, purchases, collaborator splits |
 | PraxisInvites | `0xbC74c3D815beC49507826A6b9e07E7f086FB744D` | Invite-only registration |

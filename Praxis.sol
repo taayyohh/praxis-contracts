@@ -425,7 +425,7 @@ contract Praxis {
     /// @dev Args packed into a struct to avoid stack-too-deep in via_ir coverage builds.
     /// @param args See {ProposeProjectArgs}
     /// @return id The new project's id
-    function proposeProject(ProposeProjectArgs calldata args) external onlyUser returns (uint256) {
+    function proposeProject(ProposeProjectArgs calldata args) external onlyRegistered returns (uint256) {
         require(bytes(args.title).length > 0, "empty title");
         require(args.collaborators.length > 0, "no collaborators");
         require(args.collaborators.length <= 200, "too many collaborators");
@@ -471,7 +471,8 @@ contract Praxis {
         {
             uint256 collabLen = args.collaborators.length;
             for (uint256 i = 0; i < collabLen;) {
-                require(REGISTRY.isUser(args.collaborators[i]), "collaborator not registered");
+                (, uint256 regAt) = REGISTRY.artists(args.collaborators[i]);
+                require(regAt > 0, "collaborator not an artist");
                 unchecked { ++i; }
             }
         }
