@@ -1,0 +1,32 @@
+[profile.default]
+src = "."
+out = "build"
+test = "test"
+libs = ["lib"]
+solc_version = "0.8.20"
+via_ir = true
+optimizer = true
+optimizer_runs = 200
+
+# Special profile for verification-friendly compiles. Etherscan-family verifiers
+# (Optimistic Etherscan, Etherscan v2 unified) produce non-deterministic bytecode for
+# `via_ir = true` contracts on solc 0.8.20, so any contract destined for explorer
+# verification must compile under this profile (`FOUNDRY_PROFILE=no-ir forge build`)
+# AND avoid stack-too-deep without via_ir. PraxisMedia v2.1+ was refactored to use
+# struct params for this reason.
+[profile.no-ir]
+src = "."
+out = "build"
+test = "test"
+libs = ["lib"]
+solc_version = "0.8.20"
+via_ir = false
+optimizer = true
+optimizer_runs = 200
+
+[rpc_endpoints]
+optimism = "https://mainnet.optimism.io"
+
+# Verification on Optimistic Etherscan
+[etherscan]
+optimism = { key = "${OPTIMISTIC_ETHERSCAN_API_KEY}", url = "https://api-optimistic.etherscan.io/api", chain = 10 }
